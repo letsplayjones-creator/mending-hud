@@ -1,11 +1,12 @@
 package name.modid.client;
 
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -33,64 +34,62 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        // Moderne Registrierung für Minecraft 1.21.11
-        HudElementRegistry.addLast(
-            ResourceLocation.fromNamespaceAndPath("mendinghud", "target_hud"),
-            (graphics, deltaTracker) -> {
-                Minecraft client = Minecraft.getInstance();
-                if (client.player == null || client.options.hideGui) return;
+        HudRenderCallback.EVENT.register(this::onHudRender);
+    }
 
-                // 1. XP-Flaschen zählen
-                int bottleCount = 0;
-                for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
-                    ItemStack invStack = client.player.getInventory().getItem(i);
-                    if (invStack.is(Items.EXPERIENCE_BOTTLE)) {
-                        bottleCount += invStack.getCount();
-                    }
-                }
+    private void onHudRender(GuiGraphics graphics, DeltaTracker deltaTracker) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || client.options.hideGui) return;
 
-                if (bottleCount == 0) return;
-                int availableDura = bottleCount * DURA_PER_BOTTLE;
-
-                // 2. Mending-Rüstung holen
-                List<ArmorTarget> targets = new ArrayList<>();
-                EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
-
-                try {
-                    var enchantmentRegistry = client.player.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
-                    var mendingHolder = enchantmentRegistry.getOrThrow(Enchantments.MENDING);
-
-                    for (EquipmentSlot slot : slots) {
-                        ItemStack armor = client.player.getItemBySlot(slot);
-                        if (!armor.isEmpty() && armor.isDamageableItem() && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, armor) > 0) {
-                            targets.add(new ArmorTarget(armor));
-                        }
-                    }
-                } catch (Exception e) {
-                    return;
-                }
-
-                if (targets.isEmpty()) return;
-
-                // 3. Ziel-Durability berechnen
-                int remainingDura = availableDura;
-                while (remainingDura > 0) {
-                    ArmorTarget lowest = targets.stream()
-                            .filter(t -> t.targetDura < t.maxDura)
-                            .min(Comparator.comparingInt(t -> t.targetDura))
-                            .orElse(null);
-
-                    if (lowest == null) break;
-                    lowest.targetDura++;
-                    remainingDura--;
-                }
-
-                int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
-
-                // 4. Reine Ziel-Zahl anzeigen (Testweise oben links bei X:20, Y:20)
-                String text = String.valueOf(finalTarget);
-                graphics.drawString(client.font, Component.literal(text), 20, 20, 0x55FF55, true);
+        // 1. XP-Flaschen zählen
+        int bottleCount = 0;
+        for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
+            ItemStack invStack = client.player.getInventory().getItem(i);
+            if (invStack.is(Items.EXPERIENCE_BOTTLE)) {
+                bottleCount += invStack.getCount();
             }
-        );
+        }
+
+        if (bottleCount == 0) return;
+        int availableDura = bottleCount * DURA_PER_BOTTLE;
+
+        // 2. Mending-Rüstung holen
+        List<ArmorTarget> targets = new ArrayList<>();
+        EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+
+        try {
+            var enchantmentRegistry = client.player.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
+            var mendingHolder = enchantmentRegistry.getOrThrow(Enchantments.MENDING);
+
+            for (EquipmentSlot slot : slots) {
+                ItemStack armor = client.player.getItemBySlot(slot);
+                if (!armor.isEmpty() && armor.isDamageableItem() && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, armor) > 0) {
+                    targets.add(new ArmorTarget(armor));
+                }
+            }
+        } catch (Exception e) {
+            return;
+        }
+
+        if (targets.isEmpty()) return;
+
+        // 3. Ziel-Durability berechnen
+        int remainingDura = availableDura;
+        while (remainingDura > 0) {
+            ArmorTarget lowest = targets.stream()
+                    .filter(t -> t.targetDura < t.maxDura)
+                    .min(Comparator.comparingInt(t -> t.targetDura))
+                    .orElse(null);
+
+            if (lowest == null) break;
+            lowest.targetDura++;
+            remainingDura--;
+        }
+
+        int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
+
+        // 4. Ziel-Zahl anzeigen (oben links zum Testen)
+        String text = String.valueOf(finalTarget);
+        graphics.drawString(client.font, Component.literal(text), 20, 20, 0x55FF55, true);
     }
 }
