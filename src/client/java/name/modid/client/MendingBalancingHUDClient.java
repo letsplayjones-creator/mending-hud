@@ -36,6 +36,8 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
             Minecraft client = Minecraft.getInstance();
             if (client.player == null || client.options.hideGui) return;
 
+            String statusText = "Mod Active";
+
             // 1. XP-Flaschen zählen
             int bottleCount = 0;
             for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
@@ -45,10 +47,9 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
                 }
             }
 
-            if (bottleCount == 0) return;
             int availableDura = bottleCount * DURA_PER_BOTTLE;
 
-            // 2. Mending-Rüstung einsammeln
+            // 2. Mending-Rüstung prüfen
             List<ArmorTarget> targets = new ArrayList<>();
             EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
@@ -63,35 +64,33 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
                     }
                 }
             } catch (Exception e) {
-                return;
+                statusText = "Error: Registry";
             }
 
-            if (targets.isEmpty()) return;
+            if (targets.isEmpty() && !statusText.startsWith("Error")) {
+                statusText = "No Mending Armor";
+            } else if (bottleCount == 0 && !statusText.startsWith("Error")) {
+                statusText = "No XP Bottles";
+            } else if (!targets.isEmpty()) {
+                // 3. Ziel-Durability berechnen
+                int remainingDura = availableDura;
+                while (remainingDura > 0) {
+                    ArmorTarget lowest = targets.stream()
+                            .filter(t -> t.targetDura < t.maxDura)
+                            .min(Comparator.comparingInt(t -> t.targetDura))
+                            .orElse(null);
 
-            // 3. Ziel-Durability berechnen
-            int remainingDura = availableDura;
-            while (remainingDura > 0) {
-                ArmorTarget lowest = targets.stream()
-                        .filter(t -> t.targetDura < t.maxDura)
-                        .min(Comparator.comparingInt(t -> t.targetDura))
-                        .orElse(null);
+                    if (lowest == null) break;
+                    lowest.targetDura++;
+                    remainingDura--;
+                }
 
-                if (lowest == null) break;
-                lowest.targetDura++;
-                remainingDura--;
+                int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
+                statusText = "Mend Ziel: " + finalTarget;
             }
 
-            int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
-
-            // 4. Nur die reine Zahl unten rechts zeichnen
-            String text = String.valueOf(finalTarget);
-            int screenWidth = client.getWindow().getGuiScaledWidth();
-            int screenHeight = client.getWindow().getGuiScaledHeight();
-
-            int x = screenWidth - client.font.width(text) - 15;
-            int y = screenHeight - 45;
-
-            graphics.drawString(client.font, Component.literal(text), x, y, 0x55FF55, true);
+            // 4. Absolut sicher oben links anzeigen (X: 10, Y: 10)
+            graphics.drawString(client.font, Component.literal(statusText), 10, 10, 0x55FF55, true);
         });
     }
 }
