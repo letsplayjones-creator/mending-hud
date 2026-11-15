@@ -34,65 +34,66 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        HudRenderCallback.EVENT.register(this::onHudRender);
-    }
+        HudRenderCallback.EVENT.register((graphics, deltaTracker) -> {
+            Minecraft client = Minecraft.getInstance();
+            if (client.player == null || client.options.hideGui) return;
 
-    private void onHudRender(GuiGraphics graphics, DeltaTracker deltaTracker) {
-        Minecraft client = Minecraft.getInstance();
-        if (client.player == null || client.options.hideGui) return;
-
-        // 1. XP-Bottles zählen
-        int bottleCount = 0;
-        for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
-            ItemStack invStack = client.player.getInventory().getItem(i);
-            if (invStack.is(Items.EXPERIENCE_BOTTLE)) {
-                bottleCount += invStack.getCount();
+            // 1. XP-Bottles zählen
+            int bottleCount = 0;
+            for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
+                ItemStack invStack = client.player.getInventory().getItem(i);
+                if (invStack.is(Items.EXPERIENCE_BOTTLE)) {
+                    bottleCount += invStack.getCount();
+                }
             }
-        }
 
-        if (bottleCount == 0) return;
-        int availableDura = bottleCount * DURA_PER_BOTTLE;
+            if (bottleCount == 0) return;
+            int availableDura = bottleCount * DURA_PER_BOTTLE;
 
-        // 2. Rüstung mit Mending holen
-        List<ArmorTarget> targets = new ArrayList<>();
-        EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+            // 2. Rüstung mit Mending prüfen
+            List<ArmorTarget> targets = new ArrayList<>();
+            EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
-        var enchantmentRegistry = client.player.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
-        var mendingHolder = enchantmentRegistry.getOrThrow(Enchantments.MENDING);
+            try {
+                var enchantmentRegistry = client.player.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
+                var mendingHolder = enchantmentRegistry.getOrThrow(Enchantments.MENDING);
 
-        for (EquipmentSlot slot : slots) {
-            ItemStack armor = client.player.getItemBySlot(slot);
-            if (!armor.isEmpty() && armor.isDamageableItem() && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, armor) > 0) {
-                targets.add(new ArmorTarget(armor));
+                for (EquipmentSlot slot : slots) {
+                    ItemStack armor = client.player.getItemBySlot(slot);
+                    if (!armor.isEmpty() && armor.isDamageableItem() && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, armor) > 0) {
+                        targets.add(new ArmorTarget(armor));
+                    }
+                }
+            } catch (Exception e) {
+                return;
             }
-        }
 
-        if (targets.isEmpty()) return;
+            if (targets.isEmpty()) return;
 
-        // 3. Ziel-Durability berechnen
-        int remainingDura = availableDura;
-        while (remainingDura > 0) {
-            ArmorTarget lowest = targets.stream()
-                    .filter(t -> t.targetDura < t.maxDura)
-                    .min(Comparator.comparingInt(t -> t.targetDura))
-                    .orElse(null);
+            // 3. Ziel-Durability berechnen
+            int remainingDura = availableDura;
+            while (remainingDura > 0) {
+                ArmorTarget lowest = targets.stream()
+                        .filter(t -> t.targetDura < t.maxDura)
+                        .min(Comparator.comparingInt(t -> t.targetDura))
+                        .orElse(null);
 
-            if (lowest == null) break;
-            lowest.targetDura++;
-            remainingDura--;
-        }
+                if (lowest == null) break;
+                lowest.targetDura++;
+                remainingDura--;
+            }
 
-        int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
+            int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
 
-        // 4. Nur die Zahl unten rechts rendern
-        String text = String.valueOf(finalTarget);
-        int screenWidth = client.getWindow().getGuiScaledWidth();
-        int screenHeight = client.getWindow().getGuiScaledHeight();
+            // 4. Ganz unten rechts auf dem Bildschirm anzeigen
+            String text = String.valueOf(finalTarget);
+            int screenWidth = client.getWindow().getGuiScaledWidth();
+            int screenHeight = client.getWindow().getGuiScaledHeight();
 
-        // Rechts unten platziert (ca. 40 Pixel über dem unteren Rand, rechts bündig)
-        int x = screenWidth - client.font.width(text) - 15;
-        int y = screenHeight - 45;
+            int x = screenWidth - client.font.width(text) - 15;
+            int y = screenHeight - 45;
 
-        graphics.drawString(client.font, Component.literal(text), x, y, 0x55FF55, true); // In hellem Mending-Grün
+            graphics.drawString(client.font, Component.literal(text), x, y, 0x55FF55, true);
+        });
     }
 }
