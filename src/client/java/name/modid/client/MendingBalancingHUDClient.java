@@ -32,9 +32,14 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        System.out.println(">>> MENDING HUD WURDE ERFOLGREICH GELADEN! <<<");
+        
         HudRenderCallback.EVENT.register((graphics, deltaTracker) -> {
             Minecraft client = Minecraft.getInstance();
-            if (client.player == null || client.options.hideGui) return;
+            if (client.player == null) return;
+
+            // Zwangsanzeige direkt oben in der Mitte, um Koordinaten-Probleme auszuschließen
+            String text = "HUD ACTIVE";
 
             // 1. XP-Bottles zählen
             int bottleCount = 0;
@@ -45,7 +50,6 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
                 }
             }
 
-            if (bottleCount == 0) return;
             int availableDura = bottleCount * DURA_PER_BOTTLE;
 
             // 2. Rüstung mit Mending prüfen
@@ -63,35 +67,27 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
                     }
                 }
             } catch (Exception e) {
-                return;
+                // Ignorieren
             }
 
-            if (targets.isEmpty()) return;
+            if (!targets.isEmpty()) {
+                int remainingDura = availableDura;
+                while (remainingDura > 0) {
+                    ArmorTarget lowest = targets.stream()
+                            .filter(t -> t.targetDura < t.maxDura)
+                            .min(Comparator.comparingInt(t -> t.targetDura))
+                            .orElse(null);
 
-            // 3. Ziel-Durability berechnen
-            int remainingDura = availableDura;
-            while (remainingDura > 0) {
-                ArmorTarget lowest = targets.stream()
-                        .filter(t -> t.targetDura < t.maxDura)
-                        .min(Comparator.comparingInt(t -> t.targetDura))
-                        .orElse(null);
-
-                if (lowest == null) break;
-                lowest.targetDura++;
-                remainingDura--;
+                    if (lowest == null) break;
+                    lowest.targetDura++;
+                    remainingDura--;
+                }
+                int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
+                text = "Mend Ziel: " + finalTarget;
             }
 
-            int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
-
-            // 4. Zahl zeichnen
-            String text = String.valueOf(finalTarget);
-            int screenWidth = client.getWindow().getGuiScaledWidth();
-            int screenHeight = client.getWindow().getGuiScaledHeight();
-
-            int x = screenWidth - client.font.width(text) - 15;
-            int y = screenHeight - 45;
-
-            graphics.drawString(client.font, Component.literal(text), x, y, 0x55FF55, true);
+            // Zeichnet den Text direkt oben mitten auf den Bildschirm (X: 100, Y: 100), absolut unübersehbar
+            graphics.drawString(client.font, Component.literal(text), 100, 100, 0xFF5555, true);
         });
     }
 }
