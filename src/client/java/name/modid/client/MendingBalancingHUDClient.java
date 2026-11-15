@@ -2,9 +2,7 @@ package name.modid.client;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -38,7 +36,7 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
             Minecraft client = Minecraft.getInstance();
             if (client.player == null || client.options.hideGui) return;
 
-            // 1. XP-Bottles zählen
+            // 1. XP-Flaschen zählen
             int bottleCount = 0;
             for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
                 ItemStack invStack = client.player.getInventory().getItem(i);
@@ -50,7 +48,7 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
             if (bottleCount == 0) return;
             int availableDura = bottleCount * DURA_PER_BOTTLE;
 
-            // 2. Rüstung mit Mending prüfen
+            // 2. Mending-Rüstung einsammeln
             List<ArmorTarget> targets = new ArrayList<>();
             EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
@@ -85,7 +83,7 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
 
             int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
 
-            // 4. Ganz unten rechts auf dem Bildschirm anzeigen
+            // 4. Nur die reine Zahl unten rechts zeichnen
             String text = String.valueOf(finalTarget);
             int screenWidth = client.getWindow().getGuiScaledWidth();
             int screenHeight = client.getWindow().getGuiScaledHeight();
