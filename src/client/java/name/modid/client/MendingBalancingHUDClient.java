@@ -19,20 +19,16 @@ import java.util.List;
 
 public class MendingBalancingHUDClient implements ClientModInitializer {
 
-    // 1 Bottle o' Enchanting = ca. 7 XP im Schnitt -> 14 Durability bei Mending
     private static final int DURA_PER_BOTTLE = 14;
 
     private static class ArmorTarget {
-        String name;
-        int currentDura;
         int maxDura;
         int targetDura;
 
-        ArmorTarget(String name, ItemStack stack) {
-            this.name = name;
+        ArmorTarget(ItemStack stack) {
             this.maxDura = stack.getMaxDamage();
-            this.currentDura = this.maxDura - stack.getDamageValue();
-            this.targetDura = this.currentDura;
+            int currentDura = this.maxDura - stack.getDamageValue();
+            this.targetDura = currentDura;
         }
     }
 
@@ -45,7 +41,7 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null || client.options.hideGui) return;
 
-        // 1. Experience Bottles im gesamten Inventar zählen
+        // 1. XP-Bottles zählen
         int bottleCount = 0;
         for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
             ItemStack invStack = client.player.getInventory().getItem(i);
@@ -57,24 +53,23 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
         if (bottleCount == 0) return;
         int availableDura = bottleCount * DURA_PER_BOTTLE;
 
-        // 2. Rüstungsteile mit Mending erfassen
+        // 2. Rüstung mit Mending holen
         List<ArmorTarget> targets = new ArrayList<>();
         EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
-        String[] labels = {"Helm", "Brust", "Hose", "Schuhe"};
 
         var enchantmentRegistry = client.player.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
         var mendingHolder = enchantmentRegistry.getOrThrow(Enchantments.MENDING);
 
-        for (int i = 0; i < slots.length; i++) {
-            ItemStack armor = client.player.getItemBySlot(slots[i]);
+        for (EquipmentSlot slot : slots) {
+            ItemStack armor = client.player.getItemBySlot(slot);
             if (!armor.isEmpty() && armor.isDamageableItem() && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, armor) > 0) {
-                targets.add(new ArmorTarget(labels[i], armor));
+                targets.add(new ArmorTarget(armor));
             }
         }
 
         if (targets.isEmpty()) return;
 
-        // 3. Absolute Gleichverteilung (Water-Filling Algorithmus)
+        // 3. Ziel-Durability berechnen
         int remainingDura = availableDura;
         while (remainingDura > 0) {
             ArmorTarget lowest = targets.stream()
@@ -82,28 +77,22 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
                     .min(Comparator.comparingInt(t -> t.targetDura))
                     .orElse(null);
 
-            if (lowest == null) break; // Alle Teile auf 100%
-
+            if (lowest == null) break;
             lowest.targetDura++;
             remainingDura--;
         }
 
-        // 4. HUD-Anzeige rendern (links mittig, ideal neben uku's Armor HUD)
-        int x = 12;
-        int y = client.getWindow().getGuiScaledHeight() / 2 - 40;
+        int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
 
-        graphics.drawString(client.font,
-                Component.literal("§bXP-Bottles: §f" + bottleCount + " §7(+" + availableDura + " Dura)"),
-                x, y, 0xFFFFFFFF, true);
-        y += 12;
+        // 4. Nur die Zahl unten rechts rendern
+        String text = String.valueOf(finalTarget);
+        int screenWidth = client.getWindow().getGuiScaledWidth();
+        int screenHeight = client.getWindow().getGuiScaledHeight();
 
-        for (ArmorTarget t : targets) {
-            boolean reached = t.currentDura >= t.targetDura;
-            String statusColor = reached ? "§a✔ " : "§e➔ ";
-            String line = statusColor + t.name + ": §f" + t.currentDura + " §7/ §b" + t.targetDura;
+        // Rechts unten platziert (ca. 40 Pixel über dem unteren Rand, rechts bündig)
+        int x = screenWidth - client.font.width(text) - 15;
+        int y = screenHeight - 45;
 
-            graphics.drawString(client.font, Component.literal(line), x, y, 0xFFFFFFFF, true);
-            y += 11;
-        }
+        graphics.drawString(client.font, Component.literal(text), x, y, 0x55FF55, true); // In hellem Mending-Grün
     }
 }
