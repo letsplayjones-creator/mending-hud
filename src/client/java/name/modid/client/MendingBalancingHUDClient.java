@@ -5,10 +5,10 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
@@ -60,8 +60,8 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
         var mendingHolder = enchantmentRegistry.getOrThrow(Enchantments.MENDING);
 
         // Angelegte Rüstung prüfen
-        EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
-        for (EquipmentSlot slot : slots) {
+        EquipmentSlot[] armorSlots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+        for (EquipmentSlot slot : armorSlots) {
             ItemStack armor = client.player.getItemBySlot(slot);
             if (!armor.isEmpty() && armor.isDamageableItem() && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, armor) > 0) {
                 targets.add(new ArmorTarget(armor));
@@ -74,9 +74,11 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
             if (i >= 36 && i <= 39) continue;
 
             ItemStack stack = client.player.getInventory().getItem(i);
-            if (!stack.isEmpty() && stack.getItem() instanceof ArmorItem && stack.isDamageableItem()
-                    && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, stack) > 0) {
-                targets.add(new ArmorTarget(stack));
+            if (!stack.isEmpty() && stack.isDamageableItem() && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, stack) > 0) {
+                var equippable = stack.get(DataComponents.EQUIPPABLE);
+                if (equippable != null && equippable.slot().isArmor()) {
+                    targets.add(new ArmorTarget(stack));
+                }
             }
         }
 
