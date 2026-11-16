@@ -42,6 +42,12 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null || client.options.hideGui) return;
 
+        // Prüfen, ob XP-Flaschen in der Mainhand oder Offhand gehalten werden
+        boolean holdingBottles = client.player.getMainHandItem().is(Items.EXPERIENCE_BOTTLE)
+                || client.player.getOffhandItem().is(Items.EXPERIENCE_BOTTLE);
+
+        if (!holdingBottles) return;
+
         // 1. Experience Bottles im gesamten Inventar zählen
         int bottleCount = 0;
         for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
