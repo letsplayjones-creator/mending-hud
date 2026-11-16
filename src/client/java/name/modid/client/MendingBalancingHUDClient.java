@@ -8,6 +8,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
@@ -53,13 +54,13 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
         if (bottleCount == 0) return;
         int availableDura = bottleCount * DURA_PER_BOTTLE;
 
-        // 2. Rüstungsteile mit Mending erfassen
+        // 2. Angelegte UND ausgezogene Rüstungsteile mit Mending erfassen
         List<ArmorTarget> targets = new ArrayList<>();
-        EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
-
         var enchantmentRegistry = client.player.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
         var mendingHolder = enchantmentRegistry.getOrThrow(Enchantments.MENDING);
 
+        // Angelegte Rüstung prüfen
+        EquipmentSlot[] slots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
         for (EquipmentSlot slot : slots) {
             ItemStack armor = client.player.getItemBySlot(slot);
             if (!armor.isEmpty() && armor.isDamageableItem() && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, armor) > 0) {
@@ -67,13 +68,31 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
             }
         }
 
+        // Ausgezogene Rüstung im restlichen Inventar prüfen (Slots 0-35 + Offhand 40)
+        for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
+            // Rüstungs-Slots (36-39) überspringen, da oben bereits erfasst
+            if (i >= 36 && i <= 39) continue;
+
+            ItemStack stack = client.player.getInventory().getItem(i);
+            if (!stack.isEmpty() && stack.getItem() instanceof ArmorItem && stack.isDamageableItem()
+                    && EnchantmentHelper.getItemEnchantmentLevel(mendingHolder, stack) > 0) {
+                targets.add(new ArmorTarget(stack));
+            }
+        }
+
         if (targets.isEmpty()) return;
 
-        // 3. Absolute Gleichverteilung (Water-Filling Algorithmus)
+        // Niedrigste maximale Haltbarkeit aller Teile bestimmen (Deckel für die Gleichverteilung)
+        int lowestMaxDura = targets.stream()
+                .mapToInt(t -> t.maxDura)
+                .min()
+                .orElse(0);
+
+        // 3. Gleichverteilung (Water-Filling), gedeckelt bei lowestMaxDura
         int remainingDura = availableDura;
         while (remainingDura > 0) {
             ArmorTarget lowest = targets.stream()
-                    .filter(t -> t.targetDura < t.maxDura)
+                    .filter(t -> t.targetDura < lowestMaxDura)
                     .min(Comparator.comparingInt(t -> t.targetDura))
                     .orElse(null);
 
@@ -83,15 +102,19 @@ public class MendingBalancingHUDClient implements ClientModInitializer {
             remainingDura--;
         }
 
-        // Höchsten berechneten Zielwert ermitteln
-        int finalTarget = targets.stream().mapToInt(t -> t.targetDura).max().orElse(0);
+        int finalTarget = targets.stream()
+                .mapToInt(t -> Math.min(t.targetDura, lowestMaxDura))
+                .max()
+                .orElse(0);
 
-        // 4. Exakt die gleiche Position wie in deiner ersten Version, nur als eine Zahl + sichtbarer Alpha-Farbcode (0xFF...)
-        int x = 12;
-        int y = client.getWindow().getGuiScaledHeight() / 2 - 40;
+        // 4. Zahl in Weiß (0xFFFFFFFF) unten rechts rendern
+        String text = String.valueOf(finalTarget);
+        int screenWidth = client.getWindow().getGuiScaledWidth();
+        int screenHeight = client.getWindow().getGuiScaledHeight();
 
-        graphics.drawString(client.font,
-                Component.literal(String.valueOf(finalTarget)),
-                x, y, 0xFF55FF55, true);
+        int x = screenWidth - client.font.width(text) - 10;
+        int y = screenHeight - 15;
+
+        graphics.drawString(client.font, Component.literal(text), x, y, 0xFFFFFFFF, true);
     }
 }
